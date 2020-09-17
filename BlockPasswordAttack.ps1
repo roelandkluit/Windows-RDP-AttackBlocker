@@ -161,8 +161,6 @@ function CreateFirewallruleIfNotExist($name)
     {
         $rule = Get-NetFirewallRule -DisplayName $name -ErrorAction Stop
         $addressFilter = Get-NetFirewallAddressFilter -AssociatedNetFirewallRule $rule -ErrorAction Stop
-
-        $addressFilter | fl
     }
     catch
     {
