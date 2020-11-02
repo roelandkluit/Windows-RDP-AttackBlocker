@@ -26,7 +26,8 @@
 #
 # ---------------------------------------------------------------------------------------------------
 #
-# Script version 1.2 - September 2020
+# Script version 1.3 - November 2020
+# new in version 1.3, improved performance reading eventlog by switching to Get-WinEvent
 #
 
 ##--Functions--
@@ -45,7 +46,7 @@ function Get-Whois ($ip)
 #
 # Add rule to existing filewall entry
 #
-function AddRule($iprange, $firewallrulename)
+function AddRule($iprange, $ip, $firewallrulename)
 {
     try
     {
@@ -62,7 +63,7 @@ function AddRule($iprange, $firewallrulename)
     $WhoisIf = "Unkown"
     try
     {
-        $ipInfo  = Get-Whois $iprange
+        $ipInfo  = Get-Whois $ip
         $WhoisIf = "$($ipInfo.OwnerName) - $($ipInfo.Country)"
     }
     catch
@@ -73,12 +74,12 @@ function AddRule($iprange, $firewallrulename)
             if($remip.StartsWith($iprange))
             {
 
-                "Firewall is blocking IP-range: $($iprange) - `($($WhoisIf)`)"
+                "Firewall is blocking IP-range: $($iprange) [$($ip)] - `($($WhoisIf)`)"
                 return
             }
     }
 
-    "Adding block for $($range) - `($($WhoisIf)`)"
+    "Adding block for $($range) [$($ip)] - `($($WhoisIf)`)"
     [string[]] $ipaddrCollection = $addressFilter.RemoteIP
     $ipaddrCollection += "$iprange/255.255.255.0"
 
@@ -97,13 +98,24 @@ function Block-BruteForceAttempts
     )
 
     "Starting check for Brute-Force RDP \ NetworkAuthentication Attempts within the last $HowManyHoursBack hours"
-    $events = Get-EventLog -LogName "Security" -EntryType FailureAudit -InstanceId 4625 -After ([DateTime]::Now).AddHours((-1 * $HowManyHoursBack)) -ErrorAction Stop
+    $datetime  = (get-date).AddHours(-1 * $HowManyHoursBack)
+    $events = Get-WinEvent -FilterHashtable @{ProviderName = "Microsoft-Windows-Security-Auditing"; Id = 4625; StartTime=$datetime; EndTime=Get-Date} -ErrorAction SilentlyContinue
+
     $ipList = @{}
 
     foreach($event in $events)
-    {
-
-        $ip = $event.ReplacementStrings[19]
+    {            
+        $ip = $event.Properties[19].Value
+        try
+        {
+            $domain = $event.Properties[6].Value
+            $user = $event.Properties[5].Value
+            "$([DateTime]::Now) - Found failed logon for ip: $ip `tUser: $domain\$user"
+        }
+        catch
+        {
+            "$([DateTime]::Now) - Found failed logon for ip: $ip"
+        }        
 
         if($ipList.ContainsKey($ip))
         {
@@ -146,7 +158,7 @@ function Block-BruteForceAttempts
             }
             else
             {            
-                AddRule $range $FirewallRuleName
+                AddRule $range $ip $FirewallRuleName
             }
         }
     }
@@ -168,14 +180,14 @@ function CreateFirewallruleIfNotExist($name)
         $prof = New-NetFirewallRule -DisplayName $name -Action Block -Direction Inbound -Enabled True -Profile Any -Description "This rule blocks any access to this machine after a couple of invalid logon attempts from this IP range, you can remove individual IPs. Ensure to have at least 1 IP in the remote adressed. Otherwise you will be locked out of your machine!"
         $addressFilter = Get-NetFirewallAddressFilter -AssociatedNetFirewallRule $prof -ErrorAction Stop
         $addressFilter | Set-NetFirewallAddressFilter -RemoteAddress "45.141.84.0" -ErrorAction Stop     # list must have at lease 1 ip adress, otherwise *ALL* inbound traffic is blocked
-    }    
+    }
 }
 
 ##--Main--
 
 "$([DateTime]::Now) - Script started" | Out-File "RDPFWlogging.txt" -Append
 CreateFirewallruleIfNotExist "Block Password Attack Attempts" | Out-File "RDPFWlogging.txt" -Append
-Block-BruteForceAttempts 24 "Block Password Attack Attempts" | Out-File "RDPFWlogging.txt" -Append
+Block-BruteForceAttempts 48 "Block Password Attack Attempts" | Out-File "RDPFWlogging.txt" -Append
 "$([DateTime]::Now) - Script finished" | Out-File "RDPFWlogging.txt" -Append
 
 ##--End--
