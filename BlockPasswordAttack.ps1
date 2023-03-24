@@ -60,7 +60,7 @@ function AddRule($iprange, $ip, $firewallrulename)
     }
 
 
-    $WhoisIf = "Unkown"
+    $WhoisIf = "Unknown"
     try
     {
         $ipInfo  = Get-Whois $ip
@@ -179,7 +179,7 @@ function CreateFirewallruleIfNotExist($name)
         "Cannot find Firewall rule, creating new."
         $prof = New-NetFirewallRule -DisplayName $name -Action Block -Direction Inbound -Enabled True -Profile Any -Description "This rule blocks any access to this machine after a couple of invalid logon attempts from this IP range, you can remove individual IPs. Ensure to have at least 1 IP in the remote adressed. Otherwise you will be locked out of your machine!"
         $addressFilter = Get-NetFirewallAddressFilter -AssociatedNetFirewallRule $prof -ErrorAction Stop
-        $addressFilter | Set-NetFirewallAddressFilter -RemoteAddress "45.141.84.0" -ErrorAction Stop     # list must have at lease 1 ip adress, otherwise *ALL* inbound traffic is blocked
+        $addressFilter | Set-NetFirewallAddressFilter -RemoteAddress "45.141.84.0" -ErrorAction Stop     # list must have at least 1 ip adress, otherwise *ALL* inbound traffic is blocked
     }
 }
 
